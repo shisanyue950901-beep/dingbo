@@ -7,6 +7,8 @@ import webview
 from . import __version__
 from .account import SITE
 from .core import APPDIR, Manager
+from .download import Downloader
+from urllib.parse import quote
 
 
 def res(*p) -> str:
@@ -17,6 +19,7 @@ def res(*p) -> str:
 class Api:
     def __init__(self, m: Manager):
         self.m = m
+        self.dl = Downloader(m)
         self.window = None
 
     # 账号
@@ -88,6 +91,24 @@ class Api:
             subprocess.Popen(["explorer", "/select,", str(Path(path))])
             return {"ok": True}
         return self.open_path(str(Path(path).parent))
+
+    # 视频下载（解析额度与网站共用）
+    def dl_add(self, text):
+        if self.m.account.plan == "guest":
+            return {"ok": False, "error": "请先登录网站账号"}
+        return self.dl.add(text)
+
+    def dl_state(self):
+        return self.dl.state()
+
+    def dl_clear(self):
+        return self.dl.clear()
+
+    def open_ai(self, link, mode="ai"):
+        """AI 拆解 / 文案提取：跳到 qushuiyin.asia 首页自动解析并开始。"""
+        flag = "tx" if mode == "tx" else "ai"
+        webbrowser.open(f"{SITE}/?url={quote(link or '', safe='')}&{flag}=1")
+        return {"ok": True}
 
     def open_site(self, path="/"):
         webbrowser.open(SITE + path)

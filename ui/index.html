@@ -82,6 +82,7 @@ tr:last-child td{border-bottom:0}
   <div class="logo"><i>盯</i><div><b>盯播</b><small>开播即录 · 下播即停</small></div></div>
   <nav>
     <a data-p="rooms" class="on">📡 直播间<span id="nRooms">0</span></a>
+    <a data-p="dl">⬇️ 视频下载<span id="nDl"></span></a>
     <a data-p="files">🎬 录制文件<span id="nFiles">0</span></a>
     <a data-p="logs">📝 运行日志</a>
     <a data-p="settings">⚙️ 设置</a>
@@ -113,6 +114,20 @@ tr:last-child td{border-bottom:0}
       <table><thead><tr><th style="width:36px"></th><th>主播</th><th>平台</th><th>状态</th><th>画质</th><th style="text-align:right">操作</th></tr></thead><tbody id="roomList"></tbody></table>
       <div class="empty" id="roomEmpty"><b>还没有直播间</b>在上面粘贴链接添加第一个</div>
       <div class="upsell" id="upsell" hidden></div>
+    </div>
+  </section>
+  <section class="page" id="p-dl">
+    <h1>视频下载</h1>
+    <p class="desc">粘贴抖音、小红书、B站的分享链接，去水印下载到本地（一次最多 20 条）。解析次数与网站共用。</p>
+    <div class="add">
+      <textarea id="dlText" placeholder="粘贴分享链接或整段分享文案，一行一条"></textarea>
+      <button class="pri" id="btnDl">解析下载</button>
+    </div>
+    <div class="card">
+      <div class="toolbar"><b>下载记录</b><span class="h" id="dlQuota" style="color:var(--sub);font-size:12px;margin-left:8px"></span><span class="sp"></span><button id="btnDlClear">清除已完成</button><button id="btnDlDir">打开下载文件夹</button></div>
+      <table><thead><tr><th>内容</th><th>平台</th><th>状态</th><th style="text-align:right">操作</th></tr></thead><tbody id="dlList"></tbody></table>
+      <div class="empty" id="dlEmpty"><b>还没有下载记录</b>在上面粘贴链接开始</div>
+      <div class="upsell">想看爆款拆解或提取文案？点每条记录的「AI 拆解」「提取文案」，会在 qushuiyin.asia 网站上打开（网站会再解析一次）。</div>
     </div>
   </section>
   <section class="page" id="p-files">
@@ -171,17 +186,30 @@ function render(){if(!S)return;var u=S.user,L=S.limits,R=S.rooms;
     $("roomList").innerHTML=h;$("roomEmpty").hidden=R.length>0;
     var up=$("upsell");if(u.plan==="free"){up.hidden=false;up.innerHTML="免费版可同时检测 "+L.rooms+" 个直播间、录制 1 个、单场 "+L.hours+" 小时。<a id='upGo'>开通会员</a> 可检测更多直播间、多路同录、不限时长。";$("upGo").onclick=function(){api().open_site("/vip")}}else up.hidden=true;}
   if(page==="files"){var f="";S.files.forEach(function(x){f+="<tr><td>"+esc(x.name)+'</td><td><span class="pf">'+esc(x.platform)+"</span></td><td>"+fmtDur(x.secs)+"</td><td>"+fmtSize(x.size)+"</td><td>"+fmtTime(x.t)+'</td><td><div class="ops"><button data-open="'+esc(x.path)+'">播放</button><button data-reveal="'+esc(x.path)+'">所在文件夹</button></div></td></tr>'});$("fileList").innerHTML=f;$("fileEmpty").hidden=S.files.length>0}
+  if(page==="dl"&&D){var g="";D.jobs.forEach(function(j){
+    var st=j.status==="下载中"?"下载中 <small>"+j.done+"/"+j.total+"</small>":j.status==="失败"?"失败 <small title='"+esc(j.error)+"'>"+esc(j.error.slice(0,30))+"</small>":esc(j.status)+(j.status==="完成"?" <small>"+(j.kind==="images"?j.total+" 张图":"视频")+"</small>":"");
+    var cls=j.status==="完成"?"live":j.status==="失败"?"err":/中/.test(j.status)?"rec":"";
+    var ops="";if(j.status==="完成"){ops+=(j.kind==="video"?'<button data-open="'+esc(j.files[0])+'">播放</button>':"")+'<button data-reveal="'+esc(j.files[0]||j.folder)+'">所在文件夹</button>'}
+    if(j.status!=="排队中"&&j.status!=="解析中"&&j.kind!=="images")ops+='<button data-ai="'+j.id+'">AI 拆解</button><button data-tx="'+j.id+'">提取文案</button>';
+    g+='<tr><td class="nm"><b>'+esc(j.title||"（解析中）")+"</b><small>"+esc(j.author?"@"+j.author+(j.duration?" · "+fmtDur(j.duration):""):j.text)+'</small></td><td><span class="pf">'+esc(j.platform||"—")+'</span></td><td><span class="st '+cls+'">'+st+'</span></td><td><div class="ops">'+ops+"</div></td></tr>"});
+    $("dlList").innerHTML=g;$("dlEmpty").hidden=D.jobs.length>0;
+    var q=D.quota;$("dlQuota").textContent=q&&!q.unlimited&&q.limit!=null&&q.left!=null?"今日剩余 "+Math.max(0,q.left)+"/"+q.limit+" 次":""}
   if(page==="logs"){var b=$("logBox"),atEnd=b.scrollTop+b.clientHeight>=b.scrollHeight-20;b.textContent=S.logs.join("\n");if(atEnd)b.scrollTop=b.scrollHeight}
   if(page==="settings"&&document.activeElement.tagName!=="SELECT"){$("setDir").value=S.settings.saveDir;$("setIv").value=S.settings.interval;$("setMp4").classList.toggle("on",S.settings.toMp4);$("setSeg").value=S.settings.segmentMin}
 }
-function tick(){if(!api())return;api().state().then(function(s){S=s;render()})}
+var D=null;function tick(){if(!api())return;api().state().then(function(s){S=s;render()});api().dl_state().then(function(d){D=d;var n=d.jobs.filter(function(j){return /中/.test(j.status)}).length;$("nDl").textContent=n?n+" 进行中":"";if(page==="dl")render()})}
+function jobLink(id){var j=D&&D.jobs.find(function(x){return x.id===id});return j?j.text:""}
 document.addEventListener("click",function(e){var t=e.target,d=t.dataset||{};
   if(d.sw){var r=S.rooms.find(function(x){return x.id===d.sw});api().update(d.sw,{enabled:!r.enabled}).then(tick)}
   if(d.del){if(confirm("删除这个直播间？"))api().remove(d.del).then(tick)}
   if(d.stop){api().stop(d.stop).then(tick)}
+  if(d.ai)api().open_ai(jobLink(d.ai),"ai");if(d.tx)api().open_ai(jobLink(d.tx),"tx");
   if(d.open)api().open_path(d.open);if(d.reveal)api().reveal(d.reveal)});
 document.addEventListener("change",function(e){var d=e.target.dataset||{};if(d.q)api().update(d.q,{quality:e.target.value}).then(tick)});
 $("btnAdd").onclick=function(){var b=this;b.disabled=true;api().add($("addText").value,$("addQ").value).then(function(r){b.disabled=false;toast(r.msg||r.error);if(r.ok)$("addText").value="";tick()})};
+$("btnDl").onclick=function(){var b=this;b.disabled=true;api().dl_add($("dlText").value).then(function(r){b.disabled=false;toast(r.msg||r.error);if(r.ok)$("dlText").value="";tick()})};
+$("btnDlClear").onclick=function(){api().dl_clear().then(tick)};
+$("btnDlDir").onclick=function(){api().open_path(S.settings.saveDir+"/视频下载")};
 $("btnCheck").onclick=function(){api().check_now().then(function(){toast("正在重新检测全部直播间")})};
 $("btnDir").onclick=function(){api().open_path(S.settings.saveDir)};
 $("btnPick").onclick=function(){api().pick_dir().then(tick)};
