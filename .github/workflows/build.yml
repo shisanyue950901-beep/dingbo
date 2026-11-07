@@ -28,6 +28,12 @@ jobs:
         run: python -c "import streamget, webview, dingbo.core; print('ok')"
       - name: Build
         run: pyinstaller dingbo.spec --noconfirm
+      - name: Selftest exe
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath "dist/Dingbo/盯播.exe" -ArgumentList "--selftest","selftest.txt" -Wait -PassThru
+          Get-Content selftest.txt
+          if ($p.ExitCode -ne 0) { exit 1 }
       - name: Pack
         shell: pwsh
         run: |
